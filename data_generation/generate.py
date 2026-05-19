@@ -38,11 +38,65 @@ NG             = 11            # number of Fourier orders
 
 wavelengths = np.linspace(WL_MIN, WL_MAX, NUM_WL)
 
-# ── Material epsilon (loaded once per worker via module-level cache) ───────────
+# ── Material epsilon ──────────────────────────────────────────────────────────
+# Resolved at module load time so worker subprocesses don't need to import
+# the data_generation package (which may not be on their sys.path).
+
+def _build_epsilon_fn(material: str):
+    """Return a callable wl_um -> complex epsilon for the given material."""
+    import io, os, yaml
+    import numpy as np
+    from scipy.interpolate import interp1d
+
+    MATERIALS = {
+        "Si":    ("main", "Si",    "nk/Aspnes"),
+        "SiO2":  ("main", "SiO2",  "nk/Franta"),
+        "Si3N4": ("main", "Si3N4", "nk/Beliaev"),
+        "TiO2":  ("main", "TiO2",  "nk/Franta"),
+        "GaN":   ("main", "GaN",   "nk/Kawashima"),
+        "Ge":    ("main", "Ge",    "nk/Aspnes"),
+    }
+    if material not in MATERIALS:
+        raise ValueError(f"Unknown material '{material}'. Available: {list(MATERIALS.keys())}")
+
+    shelf, book, page = MATERIALS[material]
+    db_root = os.path.join(os.path.expanduser("~"), ".refractiveindex.info-database", "data")
+    path = os.path.join(db_root, shelf, book, page + ".yml")
+
+    with open(path, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+
+    wl_n, n_arr, k_arr = None, None, None
+    for block in data["DATA"]:
+        dtype = block["type"].strip()
+        rows = np.array([
+            [float(v) for v in line.split()]
+            for line in io.StringIO(block["data"]).readlines() if line.strip()
+        ])
+        if dtype == "tabulated nk":
+            wl_n, n_arr, k_arr = rows[:, 0], rows[:, 1], rows[:, 2]
+        elif dtype == "tabulated n":
+            wl_n, n_arr = rows[:, 0], rows[:, 1]
+        elif dtype == "tabulated k":
+            k_arr = rows[:, 1]
+
+    n_fn = interp1d(wl_n, n_arr, kind="cubic", fill_value="extrapolate")
+    k_fn = (interp1d(wl_n, k_arr, kind="cubic", fill_value="extrapolate")
+            if k_arr is not None else lambda wl: 0.0)
+
+    def epsilon(wl_um: float) -> complex:
+        n, k = float(n_fn(wl_um)), float(k_fn(wl_um))
+        return (n + 1j * k) ** 2
+
+    return epsilon
+
+
+_epsilon_cache: dict = {}
 
 def _get_epsilon(material: str, wl_um: float) -> complex:
-    from data_generation.materials import get_epsilon
-    return get_epsilon(material, wl_um)
+    if material not in _epsilon_cache:
+        _epsilon_cache[material] = _build_epsilon_fn(material)
+    return _epsilon_cache[material](wl_um)
 
 
 # ── Worker function (must be top-level for multiprocessing) ──────────────────
