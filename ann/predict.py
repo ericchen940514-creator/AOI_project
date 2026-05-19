@@ -19,7 +19,7 @@ WAVELENGTHS = np.linspace(400, 700, 100)
 class ANN(nn.Module):
     def __init__(self):
         super().__init__()
-        self.net = nn.Sequential(
+        self.network = nn.Sequential(
             nn.Linear(3, 128), nn.ReLU(),
             nn.Linear(128, 256), nn.ReLU(),
             nn.Linear(256, 512), nn.ReLU(),
@@ -28,7 +28,7 @@ class ANN(nn.Module):
         )
 
     def forward(self, x):
-        return self.net(x)
+        return self.network(x)
 
 
 def load():
