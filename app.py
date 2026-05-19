@@ -1,7 +1,17 @@
 """
 OCD Pipeline — Streamlit UI
-Run: streamlit run app.py
+Run: streamlit run app.py  (or just press the VS Code run button)
 """
+import sys, subprocess, os
+if "__streamlit__" not in sys.argv[0] and "streamlit" not in sys.argv[0]:
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+        if get_script_run_ctx() is None:
+            raise RuntimeError
+    except Exception:
+        subprocess.run([sys.executable, "-m", "streamlit", "run", os.path.abspath(__file__)])
+        sys.exit()
+
 import io
 import os
 import subprocess
