@@ -45,19 +45,6 @@ def configure():
     web.configure(apikey=key)
 
 
-def analytic_incident_flux(freqs: np.ndarray, freq0: float, fwidth: float) -> np.ndarray:
-    """
-    Power spectral density of a GaussianPulse plane wave in air (normal incidence).
-    For a unit-amplitude s-pol plane wave the time-domain flux is 1/(2*eta0).
-    The FluxMonitor integrates over the cell area and normalises by it, so the
-    per-area flux spectrum equals the normalised pulse spectrum:
-
-        S(f) = exp(-((f - f0) / fwidth)^2)   [normalised to peak = 1]
-
-    Tidy3D's FluxMonitor with normalize=True already divides by this, but here
-    we are NOT using normalize — we compute R directly from the raw flux ratio.
-    """
-    return np.exp(-((freqs - freq0) / fwidth) ** 2)
 
 
 def build_simulation(w: float, h: float, p: float) -> td.Simulation:
@@ -119,15 +106,11 @@ def run_job(sim: td.Simulation, task_name: str, hdf5_path: str,
 
 def extract_reflectance(device_data: td.SimulationData) -> np.ndarray:
     """
-    Reflectance = -dev_flux / incident_flux
-    incident_flux is the analytic GaussianPulse spectrum (no reference sim needed).
-    The minus sign is because reflected flux travels in +z while the monitor
-    normal points in -z (flux sign convention in Tidy3D).
+    Tidy3D's FluxMonitor already normalises flux by the source power,
+    so flux output is directly the reflectance R(f).
     """
-    dev_flux = np.asarray(device_data["reflectance_monitor"].flux, dtype=np.float64)
-    incident  = analytic_incident_flux(FREQS, FREQ0, FWIDTH)
-    R = -dev_flux / np.maximum(incident, 1e-12)
-    return np.clip(np.real(R), 0.0, 1.5)
+    flux = np.asarray(device_data["reflectance_monitor"].flux, dtype=np.float64)
+    return np.clip(np.real(flux), 0.0, 1.0)
 
 
 def save_outputs(w: float, h: float, p: float, reflectance: np.ndarray) -> None:
