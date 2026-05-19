@@ -1,5 +1,7 @@
 """
 Tidy3D FDTD simulation — single (w, h, p) case.
+Reference flux is computed analytically (no second simulation),
+saving ~50% of credits per run.
 
 Set API key before running:
     $env:TIDY3D_API_KEY="your_api_key"   # PowerShell
@@ -7,7 +9,6 @@ Set API key before running:
 Run:
     python tidy3d/simulate.py
     python tidy3d/simulate.py --w 0.15 --h 0.30 --p 0.40
-    python tidy3d/simulate.py --reference-only   # submit reference sim only
 """
 from __future__ import annotations
 
@@ -29,6 +30,10 @@ NUM_FREQS = 100
 FREQS = np.linspace(td.C_0 / 0.700, td.C_0 / 0.400, NUM_FREQS)  # 400–700 nm
 WAVELENGTHS_NM = (td.C_0 / FREQS) * 1e3
 
+# GaussianPulse parameters — must match build_simulation()
+FREQ0  = 5e14
+FWIDTH = 2e14
+
 
 def configure():
     key = os.getenv(API_KEY_ENV)
@@ -40,8 +45,22 @@ def configure():
     web.configure(apikey=key)
 
 
-def build_simulation(w: float, h: float, p: float,
-                     include_substrate: bool, include_grating: bool) -> td.Simulation:
+def analytic_incident_flux(freqs: np.ndarray, freq0: float, fwidth: float) -> np.ndarray:
+    """
+    Power spectral density of a GaussianPulse plane wave in air (normal incidence).
+    For a unit-amplitude s-pol plane wave the time-domain flux is 1/(2*eta0).
+    The FluxMonitor integrates over the cell area and normalises by it, so the
+    per-area flux spectrum equals the normalised pulse spectrum:
+
+        S(f) = exp(-((f - f0) / fwidth)^2)   [normalised to peak = 1]
+
+    Tidy3D's FluxMonitor with normalize=True already divides by this, but here
+    we are NOT using normalize — we compute R directly from the raw flux ratio.
+    """
+    return np.exp(-((freqs - freq0) / fwidth) ** 2)
+
+
+def build_simulation(w: float, h: float, p: float) -> td.Simulation:
     silicon = material_library["cSi"]["Green2008"]
 
     substrate = td.Structure(
@@ -53,12 +72,13 @@ def build_simulation(w: float, h: float, p: float,
         medium=silicon,
     )
     plane_wave = td.PlaneWave(
-        source_time=td.GaussianPulse(freq0=5e14, fwidth=2e14),
+        source_time=td.GaussianPulse(freq0=FREQ0, fwidth=FWIDTH),
         size=(td.inf, td.inf, 0),
         center=[0, 0, h + 1.0],
         direction="-",
-        pol_angle=np.pi / 2,
+        pol_angle=np.pi / 2,   # s-polarisation, matches RCWA s_amp=1
     )
+    # Monitor placed above the source to capture reflected flux
     monitor_r = td.FluxMonitor(
         center=[0, 0, h + 1.5],
         size=[td.inf, td.inf, 0],
@@ -66,15 +86,9 @@ def build_simulation(w: float, h: float, p: float,
         name="reflectance_monitor",
     )
 
-    structures = []
-    if include_substrate:
-        structures.append(substrate)
-    if include_grating:
-        structures.append(grating)
-
     return td.Simulation(
         size=[p, p, h + 4.0],
-        structures=structures,
+        structures=[substrate, grating],
         sources=[plane_wave],
         monitors=[monitor_r],
         run_time=1e-12,
@@ -103,12 +117,16 @@ def run_job(sim: td.Simulation, task_name: str, hdf5_path: str,
             time.sleep(5)
 
 
-def extract_reflectance(device_data: td.SimulationData,
-                        reference_data: td.SimulationData) -> np.ndarray:
-    ref_flux = np.asarray(reference_data["reflectance_monitor"].flux, dtype=np.float64)
-    dev_flux = np.asarray(device_data["reflectance_monitor"].flux,    dtype=np.float64)
-    reflected = dev_flux - ref_flux
-    R = -reflected / np.maximum(np.abs(ref_flux), 1e-12)
+def extract_reflectance(device_data: td.SimulationData) -> np.ndarray:
+    """
+    Reflectance = -dev_flux / incident_flux
+    incident_flux is the analytic GaussianPulse spectrum (no reference sim needed).
+    The minus sign is because reflected flux travels in +z while the monitor
+    normal points in -z (flux sign convention in Tidy3D).
+    """
+    dev_flux = np.asarray(device_data["reflectance_monitor"].flux, dtype=np.float64)
+    incident  = analytic_incident_flux(FREQS, FREQ0, FWIDTH)
+    R = -dev_flux / np.maximum(incident, 1e-12)
     return np.clip(np.real(R), 0.0, 1.5)
 
 
@@ -137,24 +155,18 @@ def save_outputs(w: float, h: float, p: float, reflectance: np.ndarray) -> None:
     print(f"Saved: {png_path}")
 
 
-def main(w: float, h: float, p: float, reference_only: bool) -> None:
+def main(w: float, h: float, p: float) -> None:
     configure()
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     tag = f"w{w*1000:.0f}_h{h*1000:.0f}_p{p*1000:.0f}"
 
     print(f"w={w} um  h={h} um  p={p} um")
+    print("  (reference flux computed analytically — no reference simulation)")
 
-    ref_sim  = build_simulation(w, h, p, include_substrate=False, include_grating=False)
-    ref_data = run_job(ref_sim, f"ref_{tag}", f"{OUTPUT_DIR}/ref_{tag}.hdf5")
-
-    if reference_only:
-        print("--reference-only: stopping after reference simulation.")
-        return
-
-    dev_sim  = build_simulation(w, h, p, include_substrate=True, include_grating=True)
+    dev_sim  = build_simulation(w, h, p)
     dev_data = run_job(dev_sim, f"dev_{tag}", f"{OUTPUT_DIR}/dev_{tag}.hdf5")
 
-    reflectance = extract_reflectance(dev_data, ref_data)
+    reflectance = extract_reflectance(dev_data)
     save_outputs(w, h, p, reflectance)
 
 
@@ -163,6 +175,5 @@ if __name__ == "__main__":
     parser.add_argument("--w", type=float, default=0.150)
     parser.add_argument("--h", type=float, default=0.300)
     parser.add_argument("--p", type=float, default=0.400)
-    parser.add_argument("--reference-only", action="store_true")
     args = parser.parse_args()
-    main(args.w, args.h, args.p, args.reference_only)
+    main(args.w, args.h, args.p)
