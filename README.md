@@ -36,6 +36,7 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 * **`ocd_surrogate_pretrained.pth`**: 訓練完成的模型權重檔（神經網路的大腦）。
 * **`scaler.pkl`**: 資料正規化器。
 * **`predict_and_plot.py`**: 極速預測與畫圖腳本。
+* **`inverse_predict.py`**: 由目標 `spectrum` 反推 `(w, h, p)` 的 inverse prediction 腳本。
 
 ---
 
@@ -67,6 +68,22 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 2. 執行腳本：`python predict_and_plot.py`
 
 * **結果**：產出 `predicted_spectrum.png`。
+
+### 第二點五階段：由 Spectrum 反推結構參數 (Inverse Prediction)
+
+當你手上有一條目標反射光譜，想估計最可能的 `w / h / p`，可以直接使用 `inverse_predict.py`。
+
+1. 開啟 `inverse_predict.py`
+2. 設定 `TARGET_MODE`
+3. 執行腳本：`python inverse_predict.py`
+
+目前支援三種模式：
+
+* **`demo_forward`**：先用已知 `(w, h, p)` 經由模型生成目標光譜，再反推回來，適合驗證 inverse 流程。
+* **`csv_row`**：從 `rcwa_spectra_TEST.csv` 或 `rcwa_spectra_pretrain.csv` 讀一列資料當目標光譜。
+* **`manual_array`**：手動提供 100 個波長點的反射率資料。
+
+* **結果**：終端會輸出估計的 `w`、`h`、`p`、對應 loss 與誤差，並儲存 `inverse_predicted_result.png`。
 
 ### 第三階段：Tidy3D 高精度校準 (Fine-tuning)
 

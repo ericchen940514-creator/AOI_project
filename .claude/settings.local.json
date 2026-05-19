@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip --version)",
+      "Bash(where python *)",
+      "Bash(pip install *)",
+      "Bash(pip show *)",
+      "PowerShell(Get-Command python -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Command pip -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Command python3 -ErrorAction SilentlyContinue)",
+      "PowerShell(python -c \"import tidy3d; print\\(tidy3d.__version__\\); import inspect, tidy3d.web as web; print\\(inspect.signature\\(web.configure\\)\\)\")",
+      "PowerShell([System.Environment]::SetEnvironmentVariable\\(\"TIDY3D_API_KEY\", \"CO6qae1AvXVW72e8cGJaUoiGrL99QhMNazK8KfWttklZX9St\", \"User\"\\))",
+      "PowerShell(python -c \"import tidy3d as td; print\\(list\\(td.material_library['cSi'].keys\\(\\)\\)\\)\")",
+      "PowerShell(python -c \"import tidy3d as td; import numpy as np; print\\('C_0 =', td.C_0\\); freqs = np.linspace\\(td.C_0/700e-9, td.C_0/400e-9, 5\\); print\\('FREQS min/max:', freqs[0], freqs[-1]\\)\")",
+      "Bash(git add *)"
+    ]
+  }
+}

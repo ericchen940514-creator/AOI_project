@@ -36,7 +36,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # 實體化模型並載入權重
 model = OCD_Surrogate_Model().to(device)
-model.load_state_dict(torch.load("ocd_surrogate_pretrained.pth", map_location=device))
+model.load_state_dict(torch.load("ocd_surrogate_pretrained.pth", map_location=device,weights_only=True))
 model.eval() # 設定為評估(預測)模式，這很重要！
 
 # 載入 scaler
