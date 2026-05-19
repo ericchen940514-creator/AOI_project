@@ -34,7 +34,7 @@ WL_MIN, WL_MAX = 0.4, 0.7
 NUM_WL         = 100
 EPSILON_AIR    = 1.0
 NX, NY         = 50, 50        # grid resolution inside grating layer
-NG             = 11            # number of Fourier orders
+NG             = 21            # number of Fourier orders (higher = more accurate, slower)
 
 wavelengths = np.linspace(WL_MIN, WL_MAX, NUM_WL)
 
