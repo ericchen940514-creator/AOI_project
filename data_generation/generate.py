@@ -16,12 +16,15 @@ Run:
 from __future__ import annotations
 
 import argparse
+import io
 import multiprocessing as mp
 import os
 
 import grcwa
 import numpy as np
 import pandas as pd
+import yaml
+from scipy.interpolate import interp1d
 from tqdm import tqdm
 
 # ── Settings ──────────────────────────────────────────────────────────────────
@@ -34,28 +37,22 @@ WL_MIN, WL_MAX = 0.4, 0.7
 NUM_WL         = 100
 EPSILON_AIR    = 1.0
 NX, NY         = 50, 50        # grid resolution inside grating layer
-NG             = 21            # number of Fourier orders (higher = more accurate, slower)
+NG             = 51            # number of Fourier orders (higher = more accurate, slower)
 
 wavelengths = np.linspace(WL_MIN, WL_MAX, NUM_WL)
 
-# ── Material epsilon ──────────────────────────────────────────────────────────
-# Resolved at module load time so worker subprocesses don't need to import
-# the data_generation package (which may not be on their sys.path).
+MATERIALS = {
+    "Si":    ("main", "Si",    "nk/Aspnes"),
+    "SiO2":  ("main", "SiO2",  "nk/Franta"),
+    "Si3N4": ("main", "Si3N4", "nk/Beliaev"),
+    "TiO2":  ("main", "TiO2",  "nk/Franta"),
+    "GaN":   ("main", "GaN",   "nk/Kawashima"),
+    "Ge":    ("main", "Ge",    "nk/Aspnes"),
+}
 
-def _build_epsilon_fn(material: str):
-    """Return a callable wl_um -> complex epsilon for the given material."""
-    import io, os, yaml
-    import numpy as np
-    from scipy.interpolate import interp1d
 
-    MATERIALS = {
-        "Si":    ("main", "Si",    "nk/Aspnes"),
-        "SiO2":  ("main", "SiO2",  "nk/Franta"),
-        "Si3N4": ("main", "Si3N4", "nk/Beliaev"),
-        "TiO2":  ("main", "TiO2",  "nk/Franta"),
-        "GaN":   ("main", "GaN",   "nk/Kawashima"),
-        "Ge":    ("main", "Ge",    "nk/Aspnes"),
-    }
+def _precompute_epsilon(material: str) -> np.ndarray:
+    """Compute complex epsilon at each wavelength in the main process (scipy safe here)."""
     if material not in MATERIALS:
         raise ValueError(f"Unknown material '{material}'. Available: {list(MATERIALS.keys())}")
 
@@ -82,39 +79,32 @@ def _build_epsilon_fn(material: str):
 
     n_fn = interp1d(wl_n, n_arr, kind="cubic", fill_value="extrapolate")
     k_fn = (interp1d(wl_n, k_arr, kind="cubic", fill_value="extrapolate")
-            if k_arr is not None else lambda wl: 0.0)
+            if k_arr is not None else lambda wl: np.zeros_like(wl))
 
-    def epsilon(wl_um: float) -> complex:
-        n, k = float(n_fn(wl_um)), float(k_fn(wl_um))
-        return (n + 1j * k) ** 2
-
-    return epsilon
+    n_vals = n_fn(wavelengths)
+    k_vals = k_fn(wavelengths)
+    return (n_vals + 1j * k_vals) ** 2   # shape (NUM_WL,)
 
 
-_epsilon_cache: dict = {}
+# Module-level array filled in run() before spawning workers.
+# Workers inherit it via fork/spawn copy — no scipy needed in subprocesses.
+_EP_GRATING: np.ndarray | None = None
 
-def _get_epsilon(material: str, wl_um: float) -> complex:
-    if material not in _epsilon_cache:
-        _epsilon_cache[material] = _build_epsilon_fn(material)
-    return _epsilon_cache[material](wl_um)
-
-
-# ── Worker function (must be top-level for multiprocessing) ──────────────────
 
 def _worker(args: tuple) -> list:
-    material, idx, w, h, p = args
+    idx, w, h, p = args
     grcwa.set_backend("numpy")
     L1, L2 = [p, 0], [0, p]
     reflectances = []
 
-    for wl in wavelengths:
+    for i, wl in enumerate(wavelengths):
         freq       = 1.0 / wl
-        ep_grating = _get_epsilon(material, wl)
+        ep_grating = _EP_GRATING[i]
 
         obj = grcwa.obj(NG, L1, L2, freq, theta=0, phi=0, verbose=0)
         obj.Add_LayerUniform(0, EPSILON_AIR)
         obj.Add_LayerGrid(h, NX, NY)
-        obj.Add_LayerUniform(0, ep_grating)   # substrate = same material
+        obj.Add_LayerUniform(0, ep_grating)
         obj.Init_Setup()
 
         ep_grid = np.ones((NX, NY), dtype=complex) * EPSILON_AIR
@@ -127,6 +117,12 @@ def _worker(args: tuple) -> list:
         reflectances.append(R)
 
     return [idx, w, h, p] + reflectances
+
+
+def _init_worker(ep_array: np.ndarray) -> None:
+    """Initializer: inject precomputed epsilon into each worker process."""
+    global _EP_GRATING
+    _EP_GRATING = ep_array
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -143,15 +139,17 @@ def run(material: str, params_csv: str, test_mode: bool = False) -> None:
         df = df.head(100)
         print("[TEST MODE] using first 100 rows only")
 
-    tasks = [(material, row.Index, row.w, row.h, row.p) for row in df.itertuples()]
-    cores = max(1, mp.cpu_count() - 1)
+    ep_array = _precompute_epsilon(material)
+
+    tasks = [(row.Index, row.w, row.h, row.p) for row in df.itertuples()]
+    cores = max(1, min(mp.cpu_count() - 1, 8))  # NG=51 is memory-heavy; cap at 8
     print(f"Material : {material}")
     print(f"Rows     : {len(tasks):,}")
     print(f"Cores    : {cores}")
 
     results = []
-    with mp.Pool(processes=cores) as pool:
-        for res in tqdm(pool.imap(_worker, tasks), total=len(tasks), desc="RCWA"):
+    with mp.Pool(processes=cores, initializer=_init_worker, initargs=(ep_array,)) as pool:
+        for res in tqdm(pool.imap_unordered(_worker, tasks), total=len(tasks), desc="RCWA"):
             results.append(res)
 
     cols = ["id", "w", "h", "p"] + [f"R_wl_{i}" for i in range(NUM_WL)]
