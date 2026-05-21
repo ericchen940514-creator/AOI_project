@@ -22,6 +22,7 @@ import os
 
 import grcwa
 import numpy as np
+from threadpoolctl import threadpool_limits
 import pandas as pd
 import yaml
 from scipy.interpolate import interp1d
@@ -123,6 +124,7 @@ def _init_worker(ep_array: np.ndarray) -> None:
     """Initializer: inject precomputed epsilon into each worker process."""
     global _EP_GRATING
     _EP_GRATING = ep_array
+    threadpool_limits(limits=1)  # prevent each worker from spawning BLAS threads
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
