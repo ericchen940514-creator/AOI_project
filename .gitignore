@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.claude/
+tidy3d/output/*.hdf5
+data_generation/output/rcwa_Si_train*.csv
+data_generation/output/rcwa_Si_train_20000.csv
+data_generation/__pycache__/
+ann/__pycache__/
+*.log
