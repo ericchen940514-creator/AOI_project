@@ -104,6 +104,9 @@ def simulate_one(period_nm, pillar_nm, height_nm, eps_sio2, dev):
         R = sim.S_parameters(orders=[0, 0], direction="forward",
                              port="reflection", polarization="xx", ref_order=[0, 0])
         results.append(float(abs(R) ** 2))
+        del sim, ep_grid, ep_t
+        if dev.type == "cuda":
+            torch.cuda.empty_cache()
 
     return np.array(results, dtype=np.float32)
 
@@ -142,7 +145,7 @@ def sample_params(nrows, seed=42):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--nrows",   type=int, default=5000)
-    parser.add_argument("--workers", type=int, default=3)
+    parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--test",    action="store_true")
     parser.add_argument("--out",     default=None)
     parser.add_argument("--seed",    type=int, default=42)

@@ -8,8 +8,10 @@ Usage:
     python lumerical/generate_lumerical_sio2.py --nrows 100 --test
     python lumerical/generate_lumerical_sio2.py --nrows 2000
 """
-import sys, os, csv, time, argparse
+import sys, os, csv, time, argparse, io
 import numpy as np
+import yaml
+from scipy.interpolate import interp1d
 
 LUMAPI_PATH = r"C:\Program Files\Lumerical\v241\api\python"
 sys.path.append(LUMAPI_PATH)
@@ -32,10 +34,49 @@ SRC_ABOVE = 600e-9
 MON_ABOVE = 750e-9
 MON_BELOW = -500e-9
 
-MATERIAL_SIO2 = "SiO2 (Glass) - Palik"
+MATERIAL_SIO2 = "SiO2_Franta"
 
 BASE   = os.path.dirname(os.path.abspath(__file__))
 OUTDIR = os.path.join(BASE, "..", "data_generation", "output")
+
+_DB_CANDIDATES = [
+    "/mnt/c/Users/user/.refractiveindex.info-database/data",
+    os.path.join(os.path.expanduser("~"), ".refractiveindex.info-database", "data"),
+]
+DB = next((p for p in _DB_CANDIDATES if os.path.isdir(p)), None)
+
+
+def load_nk_sio2():
+    if DB is None:
+        raise RuntimeError("refractiveindex database not found.")
+    with open(os.path.join(DB, "main/SiO2/nk/Franta.yml"), encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    for block in data["DATA"]:
+        rows = np.array([
+            [float(v) for v in line.split()]
+            for line in io.StringIO(block["data"]).readlines()
+            if line.strip()
+        ])
+        wl_db, n_db, k_db = rows[:, 0] * 1000, rows[:, 1], rows[:, 2]
+    n_fn = interp1d(wl_db, n_db, kind="cubic", fill_value="extrapolate")
+    k_fn = interp1d(wl_db, k_db, kind="cubic", fill_value="extrapolate")
+    return n_fn, k_fn
+
+
+def add_franta_material(fdtd, n_fn, k_fn):
+    try:
+        fdtd.eval(f'getindex("{MATERIAL_SIO2}", 0.5e-6);')
+        return
+    except Exception:
+        pass
+
+    wl_pts = np.linspace(300e-9, 800e-9, 200)
+    # k≈0 for SiO2 in 300-800nm; Lumerical v241 requires 2 or 4 cols, not 3
+    nk_data = np.column_stack([wl_pts, n_fn(wl_pts * 1e9)])
+    mat_name = fdtd.addmaterial("Sampled data")
+    fdtd.setmaterial(mat_name, "name", MATERIAL_SIO2)
+    fdtd.setmaterial(MATERIAL_SIO2, "sampled data", nk_data)
+    fdtd.setmaterial(MATERIAL_SIO2, "color", np.array([0.5, 0.8, 1.0, 1.0]))
 
 
 # ── Parameter sampling (same seed/distribution as torcwa script) ──────────────
@@ -157,7 +198,9 @@ def main():
 
     print(f"Lumerical v241 | rows={nrows} | output={outfile}")
 
+    n_fn, k_fn = load_nk_sio2()
     fdtd = lumapi.FDTD(hide=True)
+    add_franta_material(fdtd, n_fn, k_fn)
     t0   = time.time()
     count = 0
 
