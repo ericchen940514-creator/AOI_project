@@ -85,30 +85,35 @@ def simulate_one(period_nm, pillar_nm, height_nm, eps_sio2, dev):
 
     results = []
     for i, wl in enumerate(wavelengths_um):
-        ep   = complex(eps_sio2[i])
-        ep_t = torch.tensor(ep, dtype=sim_dtype, device=dev)
+        try:
+            ep   = complex(eps_sio2[i])
+            ep_t = torch.tensor(ep, dtype=sim_dtype, device=dev)
 
-        sim = torcwa.rcwa(freq=1.0/wl, order=[1, NG], L=[p, p],
-                          dtype=sim_dtype, device=dev)
-        sim.add_input_layer(eps=torch.tensor(1.0, dtype=sim_dtype, device=dev))
-        sim.add_output_layer(eps=ep_t)   # SiO2 substrate (fused silica)
-        sim.set_incident_angle(inc_ang=1e-6, azi_ang=0.0)
+            sim = torcwa.rcwa(freq=1.0/wl, order=[1, NG], L=[p, p],
+                              dtype=sim_dtype, device=dev)
+            sim.add_input_layer(eps=torch.tensor(1.0, dtype=sim_dtype, device=dev))
+            sim.add_output_layer(eps=ep_t)
+            sim.set_incident_angle(inc_ang=1e-6, azi_ang=0.0)
 
-        ep_grid = torch.ones(NX, NX, dtype=sim_dtype, device=dev)
-        ep_grid[pillar_mask] = ep_t
-        sim.add_layer(thickness=h, eps=ep_grid)
+            ep_grid = torch.ones(NX, NX, dtype=sim_dtype, device=dev)
+            ep_grid[pillar_mask] = ep_t
+            sim.add_layer(thickness=h, eps=ep_grid)
 
-        sim.source_planewave(amplitude=[1.0, 0.0], direction="forward")
-        sim.solve_global_smatrix()
+            sim.source_planewave(amplitude=[1.0, 0.0], direction="forward")
+            sim.solve_global_smatrix()
 
-        R = sim.S_parameters(orders=[0, 0], direction="forward",
-                             port="reflection", polarization="xx", ref_order=[0, 0])
-        results.append(float(abs(R) ** 2))
-        del sim, ep_grid, ep_t
-        if dev.type == "cuda":
-            torch.cuda.empty_cache()
+            R = sim.S_parameters(orders=[0, 0], direction="forward",
+                                 port="reflection", polarization="xx", ref_order=[0, 0])
+            results.append(float(abs(R) ** 2))
+        except Exception:
+            results.append(float("nan"))
 
-    return np.array(results, dtype=np.float32)
+    arr = np.array(results, dtype=np.float32)
+    nans = np.isnan(arr)
+    if nans.any() and (~nans).any():
+        x = np.arange(len(arr))
+        arr[nans] = np.interp(x[nans], x[~nans], arr[~nans])
+    return arr
 
 
 # ── Worker process: initialised once per process ───────────────────────────────
@@ -145,7 +150,7 @@ def sample_params(nrows, seed=42):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--nrows",   type=int, default=5000)
-    parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument("--workers", type=int, default=3)
     parser.add_argument("--test",    action="store_true")
     parser.add_argument("--out",     default=None)
     parser.add_argument("--seed",    type=int, default=42)

@@ -1,0 +1,25 @@
+# Explore RCWA properties in Lumerical
+select('RCWA');
+
+?'=== RCWA Properties ===';
+
+try { v = getnamed('RCWA','x'); ?('x = ' + num2str(v)); } catch(e) { ?('x: N/A'); }
+try { v = getnamed('RCWA','y'); ?('y = ' + num2str(v)); } catch(e) { ?('y: N/A'); }
+try { v = getnamed('RCWA','z'); ?('z = ' + num2str(v)); } catch(e) { ?('z: N/A'); }
+try { v = getnamed('RCWA','x span'); ?('x span = ' + num2str(v)); } catch(e) { ?('x span: N/A'); }
+try { v = getnamed('RCWA','y span'); ?('y span = ' + num2str(v)); } catch(e) { ?('y span: N/A'); }
+try { v = getnamed('RCWA','z span'); ?('z span = ' + num2str(v)); } catch(e) { ?('z span: N/A'); }
+try { v = getnamed('RCWA','period x'); ?('period x = ' + num2str(v)); } catch(e) { ?('period x: N/A'); }
+try { v = getnamed('RCWA','period y'); ?('period y = ' + num2str(v)); } catch(e) { ?('period y: N/A'); }
+try { v = getnamed('RCWA','grating order x'); ?('grating order x = ' + num2str(v)); } catch(e) { ?('gorder x: N/A'); }
+try { v = getnamed('RCWA','grating order y'); ?('grating order y = ' + num2str(v)); } catch(e) { ?('gorder y: N/A'); }
+try { v = getnamed('RCWA','theta'); ?('theta = ' + num2str(v)); } catch(e) { ?('theta: N/A'); }
+try { v = getnamed('RCWA','phi'); ?('phi = ' + num2str(v)); } catch(e) { ?('phi: N/A'); }
+try { v = getnamed('RCWA','polarization angle'); ?('polarization angle = ' + num2str(v)); } catch(e) { ?('pol: N/A'); }
+try { v = getnamed('RCWA','wavelength start'); ?('wl start = ' + num2str(v)); } catch(e) { ?('wl start: N/A'); }
+try { v = getnamed('RCWA','wavelength stop'); ?('wl stop = ' + num2str(v)); } catch(e) { ?('wl stop: N/A'); }
+try { v = getnamed('RCWA','wavelength points'); ?('wl points = ' + num2str(v)); } catch(e) { ?('wl pts: N/A'); }
+try { v = getnamed('RCWA','background material'); ?('bg mat = ' + num2str(v)); } catch(e) { ?('bg mat: N/A'); }
+try { v = getnamed('RCWA','index'); ?('index = ' + num2str(v)); } catch(e) { ?('index: N/A'); }
+
+?'=== Done ===';

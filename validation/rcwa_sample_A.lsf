@@ -1,0 +1,75 @@
+# Lumerical RCWA simulation - Sample A
+# Structure: Air superstrate | SiO2 ridge in Air | SiO2 substrate
+# Period=680nm, Ridge=309.1nm, Height=209.7nm, WL=400-750nm
+
+# ── Parameters ─────────────────────────────────────────────────────────────────
+period_nm = 680.0;
+pillar_nm = 309.1;
+height_nm = 209.7;
+
+period_m  = period_nm * 1e-9;
+pillar_m  = pillar_nm * 1e-9;
+height_m  = height_nm * 1e-9;
+sub_thick = 2e-6;
+sup_thick = 1e-6;
+z_sub_top  = sub_thick;
+z_grat_top = sub_thick + height_m;
+z_sup_top  = sub_thick + height_m + sup_thick;
+
+# ── RCWA solver region ─────────────────────────────────────────────────────────
+addrcwa;
+set("x span", period_m);
+set("y span", period_m);
+set("z span", z_sup_top);
+set("z", z_sup_top/2);
+
+# ── SiO2 Substrate ─────────────────────────────────────────────────────────────
+addrect;
+set("name", "substrate");
+set("x span", period_m);
+set("y span", period_m);
+set("z span", sub_thick);
+set("z", sub_thick/2);
+set("material", "SiO2 (Glass) - Palik");
+
+# ── SiO2 Ridge (pillar) ────────────────────────────────────────────────────────
+addrect;
+set("name", "pillar");
+set("x span", period_m);
+set("y span", pillar_m);
+set("y", -period_m/2 + pillar_m/2);
+set("z span", height_m);
+set("z", z_sub_top + height_m/2);
+set("material", "SiO2 (Glass) - Palik");
+
+# ── Plane wave source ──────────────────────────────────────────────────────────
+addplane;
+set("injection axis", "z");
+set("direction", "forward");
+set("x span", period_m);
+set("y span", period_m);
+set("z", z_grat_top + 0.2e-6);
+set("polarization angle", 0);
+set("wavelength start", 400e-9);
+set("wavelength stop",  750e-9);
+
+# ── Global monitor settings ────────────────────────────────────────────────────
+setglobalmonitor("use wavelength spacing", 1);
+setglobalmonitor("use source limits", 1);
+setglobalmonitor("frequency points", 51);
+
+# ── RCWA field monitor ────────────────────────────────────────────────────────
+addrcwafieldmonitor;
+set("name", "rcwa_mon");
+set("monitor type", "2D Z-normal");
+set("x span", period_m);
+set("y span", period_m);
+set("z", z_grat_top + 0.1e-6);
+
+# ── Run ───────────────────────────────────────────────────────────────────────
+run;
+
+# ── Print results info ─────────────────────────────────────────────────────────
+?'Simulation complete.';
+avail = getresult("rcwa_mon");
+?avail;

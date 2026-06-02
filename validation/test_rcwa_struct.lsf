@@ -1,0 +1,91 @@
+# Test rcwasweeppropagation with struct in LSF
+# First set up a simple structure
+
+period_nm = 680.0;
+pillar_nm = 309.1;
+height_nm = 209.7;
+period_m  = period_nm * 1e-9;
+pillar_m  = pillar_nm * 1e-9;
+height_m  = height_nm * 1e-9;
+sub_thick = 2e-6;
+z_sub_top = sub_thick;
+z_grat_top = sub_thick + height_m;
+z_sup_top  = sub_thick + height_m + 1e-6;
+
+# RCWA solver
+addrcwa;
+set("x span", period_m); set("y span", period_m);
+set("z span", z_sup_top); set("z", z_sup_top/2);
+
+# Substrate
+addrect; set("name","substrate");
+set("x span",period_m); set("y span",period_m);
+set("z span",sub_thick); set("z",sub_thick/2);
+set("material","SiO2 (Glass) - Palik");
+
+# Pillar
+addrect; set("name","pillar");
+set("x span",period_m); set("y span",pillar_m);
+set("y",-period_m/2+pillar_m/2);
+set("z span",height_m); set("z",z_sub_top+height_m/2);
+set("material","SiO2 (Glass) - Palik");
+
+# Source
+addplane;
+set("injection axis","z"); set("direction","forward");
+set("x span",period_m); set("y span",period_m);
+set("z", z_grat_top+0.2e-6);
+set("polarization angle",0);
+set("wavelength start",400e-9); set("wavelength stop",750e-9);
+
+setglobalmonitor("use wavelength spacing",1);
+setglobalmonitor("use source limits",1);
+setglobalmonitor("frequency points",5);
+
+# Try rcwasweeppropagation with a struct
+?'=== Trying rcwasweeppropagation ===';
+
+# Method 1: empty struct
+s = struct;
+try {
+    result = rcwasweeppropagation(s, 1);
+    ?'Method1 (empty struct, 1):';
+    ?result;
+} catch(e1) {
+    ?('Method1 error: ' + e1);
+}
+
+# Method 2: struct with parameters
+s2 = struct;
+s2.parameter = "wavelength start";
+s2.start = 400e-9;
+s2.stop = 750e-9;
+s2.num = 5;
+try {
+    result2 = rcwasweeppropagation(s2, 1);
+    ?'Method2 (param struct):';
+    ?result2;
+} catch(e2) {
+    ?('Method2 error: ' + e2);
+}
+
+# Method 3: run first, then rcwa
+run;
+?'=== After run ===';
+try {
+    result3 = rcwasweeppropagation(struct, 2);
+    ?result3;
+} catch(e3) {
+    ?('Method3 error: ' + e3);
+}
+
+# Try rcwa() with structs
+?'=== Trying rcwa() ===';
+try {
+    r1 = rcwa(struct, struct);
+    ?r1;
+} catch(e4) {
+    ?('rcwa error: ' + e4);
+}
+
+?'=== Done ===';

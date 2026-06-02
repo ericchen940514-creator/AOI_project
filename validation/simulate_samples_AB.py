@@ -25,8 +25,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 # ── Settings ──────────────────────────────────────────────────────────────────
-NG        = 51       # harmonic orders; NX >= 2*NG+1 = 103
-NX        = 105
+NG        = 9        # harmonic orders; NX >= 2*NG+1 = 19
+NX        = 21
 WL_CHUNKS = 4        # split 256 wavelengths into 4 chunks per sample
 N_WORKERS = 4        # parallel processes → 4 GPU work streams
 

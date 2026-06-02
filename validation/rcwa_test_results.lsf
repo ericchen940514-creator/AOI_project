@@ -1,0 +1,71 @@
+# Test what results are available after RCWA run
+period_nm = 680.0;
+pillar_nm = 309.1;
+height_nm = 209.7;
+period_m  = period_nm * 1e-9;
+pillar_m  = pillar_nm * 1e-9;
+height_m  = height_nm * 1e-9;
+sub_thick = 2e-6;
+z_sub_top = sub_thick;
+z_grat_top = sub_thick + height_m;
+z_sup_top  = sub_thick + height_m + 1e-6;
+
+# RCWA solver
+addrcwa;
+set("x span", period_m); set("y span", period_m);
+set("z span", z_sup_top); set("z", z_sup_top/2);
+
+# Substrate
+addrect; set("name","substrate");
+set("x span",period_m); set("y span",period_m);
+set("z span",sub_thick); set("z",sub_thick/2);
+set("material","SiO2 (Glass) - Palik");
+
+# Pillar
+addrect; set("name","pillar");
+set("x span",period_m); set("y span",pillar_m);
+set("y",-period_m/2+pillar_m/2);
+set("z span",height_m); set("z",z_sub_top+height_m/2);
+set("material","SiO2 (Glass) - Palik");
+
+# Source
+addplane;
+set("injection axis","z"); set("direction","forward");
+set("x span",period_m); set("y span",period_m);
+set("z", z_grat_top+0.2e-6);
+set("polarization angle",0);
+set("wavelength start",400e-9); set("wavelength stop",750e-9);
+
+setglobalmonitor("use wavelength spacing",1);
+setglobalmonitor("use source limits",1);
+setglobalmonitor("frequency points",5);
+
+# Add a power (DFT) monitor for reflection
+addpower;
+set("name","power_mon");
+set("monitor type","2D Z-normal");
+set("x span",period_m); set("y span",period_m);
+set("z", z_grat_top+0.1e-6);
+
+# Add RCWA field monitor
+addrcwafieldmonitor;
+set("name","rcwa_mon");
+set("monitor type","2D Z-normal");
+set("x span",period_m); set("y span",period_m);
+set("z", z_grat_top+0.1e-6);
+
+run;
+
+?'=== After run ===';
+
+?'power_mon results:';
+res_power = getresult("power_mon");
+?res_power;
+
+?'rcwa_mon results:';
+res_rcwa = getresult("rcwa_mon");
+?res_rcwa;
+
+?'transmission test:';
+T_val = transmission("power_mon");
+?T_val;

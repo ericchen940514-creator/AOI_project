@@ -16,7 +16,7 @@ from scipy.signal import savgol_filter
 # ── Paths ─────────────────────────────────────────────────────────────────────
 BASE      = os.path.dirname(os.path.abspath(__file__))
 OUTDIR    = os.path.join(BASE, "data_generation", "output")
-CKPT_PATH = os.path.join(BASE, "ann_sio2.pth")
+CKPT_PATH = os.path.join(BASE, "ann", "ann_sio2_ng9.pth")
 DEFAULT_CSV = os.path.join(OUTDIR, "rcwa_sio2_train_ng9.csv")
 
 # ── Parameter normalisation bounds (must match generator) ─────────────────────
