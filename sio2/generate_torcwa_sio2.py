@@ -154,14 +154,27 @@ def main():
     parser.add_argument("--test",    action="store_true")
     parser.add_argument("--out",     default=None)
     parser.add_argument("--seed",    type=int, default=42)
+    parser.add_argument("--params",  default=None, help="CSV with period_nm,pillar_nm,height_nm (from params.py)")
     args = parser.parse_args()
 
     if DB is None:
         raise RuntimeError("refractiveindex database not found.")
     os.makedirs(OUTDIR, exist_ok=True)
 
-    nrows   = 100 if args.test else args.nrows
     outfile = args.out or os.path.join(OUTDIR, f"rcwa_sio2_train_ng{NG}.csv")
+
+    # Load params from CSV or sample randomly
+    if args.params and os.path.exists(args.params):
+        import pandas as pd
+        df = pd.read_csv(args.params)
+        periods = df["period_nm"].values
+        pillars = df["pillar_nm"].values
+        heights = df["height_nm"].values
+        nrows   = len(periods)
+        print(f"Params    : loaded {nrows} rows from {args.params}")
+    else:
+        nrows   = 100 if args.test else args.nrows
+        periods, pillars, heights = sample_params(nrows, seed=args.seed)
 
     print(f"Workers   : {args.workers}")
     print(f"NG={NG}  NX={NX}  dtype=complex64  NUM_WL={NUM_WL}")
@@ -184,7 +197,6 @@ def main():
         print("Already complete.")
         return
 
-    periods, pillars, heights = sample_params(nrows, seed=args.seed)
     tasks = [(i, periods[i], pillars[i], heights[i]) for i in range(done, nrows)]
 
     t0 = time.time()

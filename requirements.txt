@@ -1,0 +1,9 @@
+torch>=2.0.0
+torcwa
+numpy
+scipy
+matplotlib
+h5py
+pyyaml
+tqdm
+pandas
